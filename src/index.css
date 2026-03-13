@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+@theme {
+  --color-dj-bg: #0a0a0c;
+  --color-dj-card: #151619;
+  --color-dj-accent: #00ff9d;
+  --color-dj-accent-secondary: #ff0055;
+  --color-dj-border: #2a2b2f;
+  
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+@layer base {
+  body {
+    @apply bg-dj-bg text-white font-sans antialiased overflow-hidden;
+  }
+}
+
+.knob-container {
+  @apply relative w-12 h-12 rounded-full border-2 border-dj-border flex items-center justify-center cursor-pointer;
+  background: radial-gradient(circle at center, #2a2b2f 0%, #151619 100%);
+}
+
+.knob-indicator {
+  @apply absolute top-1 w-1 h-3 bg-dj-accent rounded-full origin-bottom;
+}
+
+.fader-track {
+  @apply w-2 h-32 bg-dj-border rounded-full relative;
+}
+
+.fader-handle {
+  @apply w-6 h-4 bg-white rounded-sm absolute left-1/2 -translate-x-1/2 cursor-pointer shadow-lg;
+}
+
+.crossfader-track {
+  @apply w-48 h-2 bg-dj-border rounded-full relative;
+}
+
+.crossfader-handle {
+  @apply w-4 h-8 bg-white rounded-sm absolute top-1/2 -translate-y-1/2 cursor-pointer shadow-lg;
+}
+
+.waveform-container {
+  @apply w-full h-24 bg-black/40 rounded-lg overflow-hidden relative border border-dj-border;
+}
+
