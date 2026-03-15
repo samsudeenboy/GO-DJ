@@ -3,6 +3,7 @@ import { Play, Pause, SkipBack, SkipForward, Zap, Mic, Drum, Music2, Layers, Ali
 import { motion, AnimatePresence } from 'motion/react';
 import { Track } from '../constants';
 import { analyzeTrack, TrackAnalysis, getLyrics, getStemAdvice } from '../services/geminiService';
+import { audioEngine } from '../services/audioEngine';
 
 interface DeckProps {
   id: 'A' | 'B';
@@ -56,7 +57,15 @@ export const Deck: React.FC<DeckProps> = ({
   const [stemAdvice, setStemAdvice] = useState<string | null>(null);
   const [waveformData, setWaveformData] = useState<number[]>([]);
   const [hotCues, setHotCues] = useState<(number | null)[]>([null, null, null, null]);
-  const [padMode, setPadMode] = useState<'HOTCUE' | 'SAMPLER' | 'STEMS' | 'SLICER' | 'SCRATCH' | 'STUTTER'>('HOTCUE');
+  const [padMode, setPadMode] = useState<'HOTCUE' | 'SAMPLER' | 'STEMS' | 'SLICER' | 'SCRATCH' | 'STUTTER' | 'BEATJUMP'>('HOTCUE');
+
+  const handleBeatJump = (beats: number) => {
+    if (!track) return;
+    const bpm = analysis?.bpm || 120;
+    const beatDuration = 60 / bpm;
+    const jumpAmount = beats * beatDuration;
+    onSeek(Math.max(0, Math.min(duration, currentTime + jumpAmount)));
+  };
   const [isScratching, setIsScratching] = useState(false);
   const [jogRotation, setJogRotation] = useState(0);
   const jogRef = useRef<HTMLDivElement>(null);
@@ -174,6 +183,7 @@ export const Deck: React.FC<DeckProps> = ({
   };
 
   const [activeStutter, setActiveStutter] = useState<number | null>(null);
+  const [activeSlice, setActiveSlice] = useState<number | null>(null);
   const stutterInterval = useRef<number | null>(null);
 
   const handleStutter = (division: number) => {
@@ -200,8 +210,16 @@ export const Deck: React.FC<DeckProps> = ({
   useEffect(() => {
     return () => {
       if (stutterInterval.current) window.clearInterval(stutterInterval.current);
+      audioEngine.clearLoop(id);
     };
   }, []);
+
+  useEffect(() => {
+    if (padMode !== 'SLICER') {
+      setActiveSlice(null);
+      audioEngine.clearLoop(id);
+    }
+  }, [padMode]);
 
   useEffect(() => {
     if (isScratching) {
@@ -276,9 +294,8 @@ export const Deck: React.FC<DeckProps> = ({
   };
 
   const handleSampler = (index: number) => {
-    // Simulate triggering a sample
-    console.log(`Triggering sample ${index + 1}`);
-    // In a real app, this would play an Audio object
+    const notes = ['A1', 'A2', 'C1', 'C2', 'E1', 'E2', 'G1', 'G2'];
+    audioEngine.triggerSample(notes[index % notes.length]);
   };
 
   const handleScratch = (intensity: number) => {
@@ -290,13 +307,32 @@ export const Deck: React.FC<DeckProps> = ({
     }, 50);
   };
 
-  const handleSlicer = (sliceIndex: number) => {
-    if (!track) return;
-    const bpm = analysis?.bpm || 120;
+  const [slicerLoopMode, setSlicerLoopMode] = useState(false);
+
+  const handleSlicerStart = (sliceIndex: number) => {
+    if (!track || !analysis) return;
+    const bpm = analysis.bpm || 120;
     const beatDuration = 60 / bpm;
-    const sliceTime = (beatDuration / 4) * sliceIndex;
-    const currentBeatStart = Math.floor(currentTime / beatDuration) * beatDuration;
-    onSeek(currentBeatStart + sliceTime);
+    const sliceLength = beatDuration / 2; // 1/2 beat slices
+    
+    // We slice the current 4-beat section (1 bar)
+    const sectionLength = beatDuration * 4;
+    const currentSectionStart = Math.floor(currentTime / sectionLength) * sectionLength;
+    const startTime = currentSectionStart + (sliceLength * sliceIndex);
+    
+    // Ensure we don't seek past duration
+    const finalStartTime = Math.min(startTime, duration - 0.1);
+    
+    setActiveSlice(sliceIndex);
+    onSeek(finalStartTime);
+    audioEngine.setLoop(id, finalStartTime, Math.min(finalStartTime + sliceLength, duration));
+  };
+
+  const handleSlicerEnd = () => {
+    if (!slicerLoopMode) {
+      setActiveSlice(null);
+      audioEngine.clearLoop(id);
+    }
   };
 
   const handleHotCue = (index: number) => {
@@ -321,62 +357,71 @@ export const Deck: React.FC<DeckProps> = ({
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="flex-1 bg-dj-card rounded-[2.5rem] p-8 border border-dj-border flex flex-col gap-8 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.7)] relative overflow-hidden group/deck"
+      className="flex-1 pro-card p-10 flex flex-col gap-10 relative overflow-hidden group/deck"
     >
       {/* Background Decorative Elements */}
-      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-white/5 to-transparent" />
-      <div className="absolute -right-20 -top-20 w-64 h-64 bg-dj-accent/5 rounded-full blur-[100px] pointer-events-none" />
+      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+      <div className="absolute -right-32 -top-32 w-96 h-96 bg-dj-accent/5 rounded-full blur-[120px] pointer-events-none" />
       
       {/* Deck Header */}
-      <div className="flex justify-between items-center z-10">
-        <div className="flex gap-5 items-center">
+      <div className="flex justify-between items-start z-10">
+        <div className="flex gap-6 items-center">
           <motion.div 
             whileHover={{ scale: 1.1, rotate: 5 }}
-            className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xl shadow-2xl border-2 ${id === 'A' ? 'bg-dj-accent/10 border-dj-accent text-dj-accent shadow-dj-accent/20' : 'bg-dj-accent-secondary/10 border-dj-accent-secondary text-dj-accent-secondary shadow-dj-accent-secondary/20'}`}
+            className={`w-16 h-16 rounded-2xl flex items-center justify-center font-black text-2xl shadow-2xl border-2 ${id === 'A' ? 'bg-dj-accent/10 border-dj-accent text-dj-accent shadow-dj-accent/20' : 'bg-dj-accent-secondary/10 border-dj-accent-secondary text-dj-accent-secondary shadow-dj-accent-secondary/20'}`}
           >
             {id}
           </motion.div>
-          <div className="flex flex-col">
-            <h2 className="text-2xl font-black truncate max-w-[250px] tracking-tight text-white/90 uppercase">{track?.title || 'No Track Loaded'}</h2>
-            <div className="flex items-center gap-2">
-              <p className="text-xs text-white/40 font-black uppercase tracking-widest">{track?.artist || 'Select a track'}</p>
+          <div className="flex flex-col gap-1">
+            <h2 className="text-3xl font-black truncate max-w-[350px] tracking-tight text-white/90 uppercase leading-none">{track?.title || 'No Track Loaded'}</h2>
+            <div className="flex items-center gap-3">
+              <p className="text-sm text-white/40 font-black uppercase tracking-[0.2em]">{track?.artist || 'Select a track'}</p>
               {analysis && (
-                <div className="px-2 py-0.5 rounded bg-white/5 border border-white/10 text-[8px] font-black text-white/30 uppercase tracking-tighter">
+                <div className="px-3 py-1 rounded-lg bg-white/5 border border-white/10 text-[9px] font-black text-white/40 uppercase tracking-widest">
                   {analysis.key} • {analysis.mood}
                 </div>
               )}
             </div>
           </div>
         </div>
-        <div className="flex flex-col items-end gap-1">
-          <div className="flex items-center gap-4">
+        <div className="flex flex-col items-end gap-3">
+          <div className="flex items-center gap-6">
             <motion.button 
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={onToggleSandbox}
-              className={`px-4 py-1.5 rounded-full border text-[10px] font-black uppercase tracking-[0.2em] transition-all flex items-center gap-2.5 ${isSandbox ? 'bg-orange-500 text-black border-orange-400 shadow-[0_0_20px_rgba(249,115,22,0.4)]' : 'bg-white/5 border-white/10 text-white/30 hover:text-white'}`}
+              className={`px-5 py-2 rounded-xl border text-[10px] font-black uppercase tracking-[0.2em] transition-all flex items-center gap-3 ${isSandbox ? 'bg-orange-500 text-black border-orange-400 shadow-[0_0_25px_rgba(249,115,22,0.5)]' : 'bg-white/5 border-white/10 text-white/30 hover:text-white'}`}
             >
-              <div className={`w-2 h-2 rounded-full ${isSandbox ? 'bg-black animate-pulse' : 'bg-white/20'}`} />
+              <div className={`w-2.5 h-2.5 rounded-full ${isSandbox ? 'bg-black animate-pulse' : 'bg-white/20'}`} />
               SANDBOX
             </motion.button>
             <div className="flex flex-col items-end">
-              <div className={`text-3xl font-black font-mono tracking-tighter leading-none ${id === 'A' ? 'text-dj-accent' : 'text-dj-accent-secondary'}`}>{formatTime(currentTime)}</div>
-              <div className="text-[10px] text-white/20 font-black tracking-widest mt-1">-{formatTime(duration - currentTime)}</div>
+              <div className={`text-4xl font-black font-mono tracking-tighter leading-none ${id === 'A' ? 'text-dj-accent' : 'text-dj-accent-secondary'}`}>{formatTime(currentTime)}</div>
+              <div className="text-[11px] text-white/20 font-black tracking-[0.2em] mt-2">-{formatTime(duration - currentTime)}</div>
             </div>
           </div>
         </div>
       </div>
 
       {/* Visualizer Area */}
-      <div className="waveform-container group z-10 h-40 bg-black/80 rounded-3xl border border-white/5 relative overflow-hidden shadow-[inset_0_4px_20px_rgba(0,0,0,0.8)]">
-        <div className="absolute inset-0 bg-gradient-to-b from-white/[0.02] via-transparent to-transparent pointer-events-none" />
+      <div className="waveform-container group z-10 h-48 bg-black/90 rounded-[2rem] border border-white/5 relative overflow-hidden shadow-[inset_0_8px_32px_rgba(0,0,0,0.9)]">
+        <div className="absolute inset-0 bg-gradient-to-b from-white/[0.03] via-transparent to-transparent pointer-events-none" />
         
         {/* Level Meter Overlay */}
-        <div className="absolute right-3 top-3 bottom-3 w-2 flex flex-col-reverse gap-1 z-30">
-          {Array.from({ length: 20 }).map((_, i) => (
+        <div className="absolute right-4 top-4 bottom-4 w-3 flex flex-col-reverse gap-1 z-30">
+          {Array.from({ length: 24 }).map((_, i) => (
             <motion.div 
               key={i}
               animate={{ 
+                opacity: level > (i / 24) ? 1 : 0.1,
+                backgroundColor: i > 20 ? '#ff0055' : i > 16 ? '#ff8c00' : '#00ff9d',
+                scale: level > (i / 24) ? [1, 1.2, 1] : 1
+              }}
+              transition={{ duration: 0.1 }}
+              className="flex-1 h-full rounded-full shadow-[0_0_5px_rgba(0,0,0,0.5)]"
+            />
+          ))}
+        </div>
                 opacity: level > (i / 20) ? 1 : 0.1,
                 backgroundColor: i > 17 ? '#ff0055' : i > 14 ? '#ff8c00' : (id === 'A' ? '#00ff9d' : '#ff0055'),
                 scale: level > (i / 20) ? 1.1 : 1
@@ -423,6 +468,35 @@ export const Deck: React.FC<DeckProps> = ({
             </div>
           )}
         </div>
+
+        {/* Slicer Markers */}
+        {padMode === 'SLICER' && analysis && (
+          <div className="absolute inset-0 px-10 pointer-events-none z-20">
+            {Array.from({ length: 8 }).map((_, i) => {
+              const bpm = analysis.bpm || 120;
+              const beatDuration = 60 / bpm;
+              const sectionLength = beatDuration * 4;
+              const currentSectionStart = Math.floor(currentTime / sectionLength) * sectionLength;
+              const sliceLength = beatDuration / 2;
+              const sliceTime = currentSectionStart + (sliceLength * i);
+              const left = (sliceTime / duration) * 100;
+              
+              if (left < 0 || left > 100) return null;
+
+              return (
+                <div 
+                  key={i}
+                  className={`absolute top-0 bottom-0 w-[1px] transition-colors duration-200 ${activeSlice === i ? (id === 'A' ? 'bg-dj-accent shadow-[0_0_10px_#00ff9d]' : 'bg-dj-accent-secondary shadow-[0_0_10px_#ff0055]') : 'bg-white/20'}`}
+                  style={{ left: `${left}%` }}
+                >
+                  <div className={`absolute top-0 left-1/2 -translate-x-1/2 px-1 rounded-b-sm text-[6px] font-black ${activeSlice === i ? 'bg-white text-black' : 'bg-white/10 text-white/40'}`}>
+                    {i + 1}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Playhead Line */}
         {duration > 0 && (
@@ -687,7 +761,7 @@ export const Deck: React.FC<DeckProps> = ({
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-white/5 to-transparent" />
             <div className="flex items-center justify-between mb-5 px-1">
               <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
-                {['HOTCUE', 'SAMPLER', 'STEMS', 'SCRATCH', 'SLICER', 'STUTTER'].map((mode) => (
+                {['HOTCUE', 'SAMPLER', 'STEMS', 'SCRATCH', 'SLICER', 'STUTTER', 'BEATJUMP'].map((mode) => (
                   <motion.button
                     whileHover={{ y: -1 }}
                     key={mode}
@@ -802,24 +876,43 @@ export const Deck: React.FC<DeckProps> = ({
                     initial={{ opacity: 0, x: 10 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -10 }}
-                    className="col-span-4 grid grid-cols-4 gap-3"
+                    className="col-span-4 flex flex-col gap-3"
                   >
-                    {Array.from({ length: 8 }).map((_, i) => (
-                      <motion.button 
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        key={i}
-                        onClick={() => handleSlicer(i)}
-                        className="aspect-square rounded-2xl bg-black/60 border-2 border-white/5 flex flex-col items-center justify-center gap-1 hover:border-white/20 transition-all group shadow-lg shadow-black/40"
+                    <div className="grid grid-cols-4 gap-3">
+                      {Array.from({ length: 8 }).map((_, i) => (
+                        <motion.button 
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          key={i}
+                          onMouseDown={() => handleSlicerStart(i)}
+                          onMouseUp={handleSlicerEnd}
+                          onMouseLeave={handleSlicerEnd}
+                          onTouchStart={() => handleSlicerStart(i)}
+                          onTouchEnd={handleSlicerEnd}
+                          className={`aspect-square rounded-2xl border-2 flex flex-col items-center justify-center gap-1 transition-all group shadow-lg shadow-black/40 ${
+                            activeSlice === i 
+                              ? (id === 'A' ? 'bg-dj-accent/20 border-dj-accent text-dj-accent shadow-[0_0_15px_rgba(0,255,157,0.3)]' : 'bg-dj-accent-secondary/20 border-dj-accent-secondary text-dj-accent-secondary shadow-[0_0_15px_rgba(255,0,85,0.3)]')
+                              : 'bg-black/60 border-white/5 text-white/20 hover:border-white/20'
+                          }`}
+                        >
+                          <div className="flex gap-0.5">
+                            {Array.from({ length: 8 }).map((_, j) => (
+                              <div key={j} className={`w-0.5 h-3 rounded-full ${i === j ? (id === 'A' ? 'bg-dj-accent' : 'bg-dj-accent-secondary') : 'bg-white/5'}`} />
+                            ))}
+                          </div>
+                          <span className="text-[9px] font-black uppercase tracking-tighter">SLICE {i + 1}</span>
+                        </motion.button>
+                      ))}
+                    </div>
+                    <div className="flex items-center justify-between px-1">
+                      <div className="text-[8px] font-black text-white/20 uppercase tracking-widest">Slicer Mode</div>
+                      <button 
+                        onClick={() => setSlicerLoopMode(!slicerLoopMode)}
+                        className={`px-3 py-1.5 rounded-lg text-[8px] font-black uppercase transition-all border tracking-widest ${slicerLoopMode ? (id === 'A' ? 'bg-dj-accent text-black border-dj-accent shadow-[0_0_10px_rgba(0,255,157,0.4)]' : 'bg-dj-accent-secondary text-white border-dj-accent-secondary shadow-[0_0_10px_rgba(255,0,85,0.4)]') : 'bg-white/5 text-white/40 border-white/10'}`}
                       >
-                        <div className="flex gap-0.5">
-                          {Array.from({ length: 4 }).map((_, j) => (
-                            <div key={j} className={`w-1 h-3 rounded-full ${i === j ? (id === 'A' ? 'bg-dj-accent' : 'bg-dj-accent-secondary') : 'bg-white/5'}`} />
-                          ))}
-                        </div>
-                        <span className="text-[9px] font-black text-white/20 group-hover:text-white/60">SLICE {i + 1}</span>
-                      </motion.button>
-                    ))}
+                        {slicerLoopMode ? 'SLICER LOOP ON' : 'SLICER LOOP OFF'}
+                      </button>
+                    </div>
                   </motion.div>
                 ) : padMode === 'STUTTER' ? (
                   <motion.div 
@@ -845,6 +938,29 @@ export const Deck: React.FC<DeckProps> = ({
                           1/{Math.round(1/div)}
                         </div>
                         <span className="text-[7px] font-black opacity-40 uppercase tracking-tighter">STUTTER</span>
+                      </motion.button>
+                    ))}
+                  </motion.div>
+                ) : padMode === 'BEATJUMP' ? (
+                  <motion.div 
+                    key="beatjump"
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    className="col-span-4 grid grid-cols-4 gap-3"
+                  >
+                    {[-16, -8, -4, -1, 1, 4, 8, 16].map((beats, i) => (
+                      <motion.button 
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        key={i}
+                        onClick={() => handleBeatJump(beats)}
+                        className={`aspect-square rounded-2xl border-2 flex flex-col items-center justify-center gap-1 transition-all group shadow-lg shadow-black/40 bg-black/60 border-white/5 text-white/20 hover:border-white/20 hover:text-white`}
+                      >
+                        <div className={`text-[12px] font-black ${beats > 0 ? 'text-dj-accent' : 'text-red-500'}`}>
+                          {beats > 0 ? `+${beats}` : beats}
+                        </div>
+                        <span className="text-[7px] font-black opacity-40 uppercase tracking-tighter">BEATS</span>
                       </motion.button>
                     ))}
                   </motion.div>

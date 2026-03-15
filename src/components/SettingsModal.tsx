@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, Volume2, Monitor, Cpu, Keyboard, Sliders, Shield, Zap, Plus, Trash2, Settings2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { midiService } from '../services/midiService';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -10,6 +11,28 @@ interface SettingsModalProps {
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, settings, onUpdateSetting }) => {
+  const [activeSection, setActiveSection] = React.useState('audio');
+  const [isMapping, setIsMapping] = React.useState(false);
+  const [mappingAction, setMappingAction] = React.useState<string | null>(null);
+
+  const startMidiLearn = (action: string, label: string, type: 'Toggle' | 'Analog') => {
+    setIsMapping(true);
+    setMappingAction(action);
+    midiService.startLearning((midiId) => {
+      const newMapping = { id: midiId, action, label, type };
+      const existingMappings = settings.midiMappings || [];
+      const filteredMappings = existingMappings.filter((m: any) => m.action !== action && m.id !== midiId);
+      onUpdateSetting('midiMappings', [...filteredMappings, newMapping]);
+      stopMidiLearn();
+    });
+  };
+
+  const stopMidiLearn = () => {
+    setIsMapping(false);
+    setMappingAction(null);
+    midiService.stopLearning();
+  };
+
   if (!isOpen) return null;
 
   const sections = [
@@ -20,8 +43,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
     { id: 'mixer', label: 'Mixer', icon: <Sliders size={16} /> },
     { id: 'ai', label: 'AI Engine', icon: <Zap size={16} /> },
   ];
-
-  const [activeSection, setActiveSection] = React.useState('audio');
 
   return (
     <AnimatePresence>
@@ -104,52 +125,97 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, s
                         <p className="text-[10px] text-white/40 uppercase tracking-tighter">Web MIDI API Status: Active</p>
                       </div>
                     </div>
-                    <button className="px-3 py-1 bg-dj-accent text-black text-[10px] font-black rounded uppercase">Rescan</button>
+                    <button className="px-3 py-1 bg-dj-accent text-black text-[10px] font-black rounded uppercase hover:scale-105 transition-transform">Rescan</button>
                   </div>
                   
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                      <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest">MIDI Mappings</p>
-                      <button className="flex items-center gap-2 text-[9px] font-black uppercase text-dj-accent hover:underline">
-                        <Plus size={12} />
-                        Add New Mapping
-                      </button>
+                      <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Active Mappings</p>
+                      <div className="flex gap-2">
+                        {isMapping && (
+                          <motion.div 
+                            animate={{ opacity: [0.5, 1, 0.5] }}
+                            transition={{ duration: 1, repeat: Infinity }}
+                            className="flex items-center gap-2 px-2 py-1 bg-red-500/20 border border-red-500/40 rounded text-[9px] font-black text-red-500 uppercase"
+                          >
+                            Learning: {mappingAction}
+                          </motion.div>
+                        )}
+                      </div>
                     </div>
 
-                    <div className="space-y-2">
-                      {[
-                        { control: 'Deck A Play/Pause', midi: 'CH1 CC#10', type: 'Toggle' },
-                        { control: 'Deck B Play/Pause', midi: 'CH1 CC#11', type: 'Toggle' },
-                        { control: 'Crossfader', midi: 'CH1 CC#07', type: 'Analog' },
-                        { control: 'Deck A Volume', midi: 'CH1 CC#01', type: 'Analog' },
-                      ].map((mapping, i) => (
-                        <div key={i} className="flex items-center justify-between p-3 bg-black/40 border border-white/5 rounded-xl group hover:border-dj-accent/30 transition-all">
-                          <div className="flex flex-col">
-                            <span className="text-[10px] font-bold text-white/80">{mapping.control}</span>
-                            <span className="text-[8px] text-white/30 uppercase tracking-widest">{mapping.type}</span>
-                          </div>
-                          <div className="flex items-center gap-4">
-                            <div className="px-2 py-1 bg-white/5 rounded border border-white/10 text-[9px] font-mono text-dj-accent">
-                              {mapping.midi}
+                    <div className="space-y-2 max-h-48 overflow-y-auto pr-2 scrollbar-hide">
+                      {settings.midiMappings.length > 0 ? (
+                        settings.midiMappings.map((mapping: any, i: number) => (
+                          <div key={i} className="flex items-center justify-between p-3 bg-black/40 border border-white/5 rounded-xl group hover:border-dj-accent/30 transition-all">
+                            <div className="flex flex-col">
+                              <span className="text-[10px] font-bold text-white/80">{mapping.label}</span>
+                              <span className="text-[8px] text-white/30 uppercase tracking-widest">{mapping.type}</span>
                             </div>
-                            <button className="text-white/20 hover:text-red-500 transition-colors">
-                              <Trash2 size={14} />
-                            </button>
+                            <div className="flex items-center gap-4">
+                              <div className="px-2 py-1 bg-white/5 rounded border border-white/10 text-[9px] font-mono text-dj-accent">
+                                {mapping.id.toUpperCase()}
+                              </div>
+                              <button 
+                                onClick={() => {
+                                  const newMappings = settings.midiMappings.filter((_: any, idx: number) => idx !== i);
+                                  onUpdateSetting('midiMappings', newMappings);
+                                }}
+                                className="text-white/20 hover:text-red-500 transition-colors"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
                           </div>
+                        ))
+                      ) : (
+                        <div className="p-8 border border-dashed border-white/5 rounded-xl flex flex-col items-center justify-center gap-2 opacity-20">
+                          <Keyboard size={24} />
+                          <span className="text-[10px] font-black uppercase tracking-widest">No Mappings Found</span>
                         </div>
-                      ))}
+                      )}
                     </div>
                   </div>
 
-                  <div className="p-4 bg-dj-accent/5 border border-dashed border-dj-accent/20 rounded-xl flex flex-col items-center justify-center gap-3 text-center">
+                  <div className="p-5 bg-dj-accent/5 border border-dashed border-dj-accent/20 rounded-xl flex flex-col items-center justify-center gap-4 text-center relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-dj-accent/20 to-transparent" />
                     <Settings2 size={24} className="text-dj-accent/40" />
                     <div className="space-y-1">
-                      <p className="text-[11px] font-bold text-white">Initiate Device Mapping</p>
-                      <p className="text-[9px] text-white/40 uppercase leading-tight">Click below to start the interactive MIDI learning process for your connected hardware.</p>
+                      <p className="text-[11px] font-bold text-white">Interactive MIDI Learn</p>
+                      <p className="text-[9px] text-white/40 uppercase leading-tight tracking-widest">Map your hardware controls to GO DJ actions</p>
                     </div>
-                    <button className="mt-2 px-6 py-2 bg-dj-accent/20 border border-dj-accent text-dj-accent text-[10px] font-black rounded-lg uppercase tracking-widest hover:bg-dj-accent hover:text-black transition-all">
-                      Start MIDI Learn
-                    </button>
+                    
+                    <div className="grid grid-cols-2 gap-2 w-full mt-2">
+                      {[
+                        { action: 'PLAY_PAUSE_A', label: 'Deck A Play', type: 'Toggle' },
+                        { action: 'PLAY_PAUSE_B', label: 'Deck B Play', type: 'Toggle' },
+                        { action: 'CROSSFADER', label: 'Crossfader', type: 'Analog' },
+                        { action: 'VOLUME_A', label: 'Deck A Volume', type: 'Analog' },
+                        { action: 'VOLUME_B', label: 'Deck B Volume', type: 'Analog' },
+                        { action: 'EQ_LOW_A', label: 'Deck A Low', type: 'Analog' },
+                        { action: 'EQ_MID_A', label: 'Deck A Mid', type: 'Analog' },
+                        { action: 'EQ_HIGH_A', label: 'Deck A High', type: 'Analog' },
+                      ].map((item) => (
+                        <button
+                          key={item.action}
+                          onClick={() => startMidiLearn(item.action, item.label, item.type as any)}
+                          className={`px-3 py-2 border rounded-lg text-[9px] font-black uppercase transition-all ${mappingAction === item.action ? 'bg-dj-accent text-black border-dj-accent shadow-[0_0_15px_rgba(0,255,157,0.4)]' : 'bg-white/5 border-white/10 text-white/60 hover:border-dj-accent/50'}`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {isMapping && (
+                      <motion.button 
+                        initial={{ scale: 0.9, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        onClick={stopMidiLearn}
+                        className="mt-2 w-full py-2 bg-red-500/20 border border-red-500 text-red-500 text-[10px] font-black rounded-lg uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all"
+                      >
+                        Cancel Mapping
+                      </motion.button>
+                    )}
                   </div>
                 </div>
               )}

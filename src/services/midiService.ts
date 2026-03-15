@@ -1,15 +1,23 @@
 import { Track } from '../constants';
 
 export interface MidiMapping {
-  [key: string]: {
-    action: string;
-    params?: any;
-  };
+  id: string; // e.g. "cc-7" or "note-60"
+  action: string;
+  label: string;
+  type: 'Toggle' | 'Analog' | 'Trigger';
 }
 
 export class MidiService {
   private access: MIDIAccess | null = null;
-  private onMessageCallback: ((action: string, params?: any) => void) | null = null;
+  private onMessageCallback: ((action: string, value?: number) => void) | null = null;
+  private onLearnCallback: ((midiId: string) => void) | null = null;
+  private mappings: MidiMapping[] = [
+    { id: 'note-60', action: 'PLAY_PAUSE_A', label: 'Deck A Play/Pause', type: 'Toggle' },
+    { id: 'note-62', action: 'PLAY_PAUSE_B', label: 'Deck B Play/Pause', type: 'Toggle' },
+    { id: 'cc-7', action: 'CROSSFADER', label: 'Crossfader', type: 'Analog' },
+    { id: 'cc-10', action: 'VOLUME_A', label: 'Deck A Volume', type: 'Analog' },
+    { id: 'cc-11', action: 'VOLUME_B', label: 'Deck B Volume', type: 'Analog' },
+  ];
 
   async initialize() {
     try {
@@ -35,37 +43,52 @@ export class MidiService {
   private handleMidiMessage(message: MIDIMessageEvent) {
     const [status, data1, data2] = message.data;
     const command = status & 0xf0;
-    const channel = status & 0x0f;
+    
+    let midiId = '';
+    let value = 0;
 
-    // Basic mapping logic (can be expanded)
-    // Note On: 0x90, CC: 0xB0
     if (command === 0x90 && data2 > 0) {
-      // Button press
-      this.triggerAction('button', data1);
+      midiId = `note-${data1}`;
+      value = 1;
+    } else if (command === 0x80) {
+      midiId = `note-${data1}`;
+      value = 0;
     } else if (command === 0xB0) {
-      // Knob/Fader move
-      this.triggerAction('cc', data1, data2 / 127);
+      midiId = `cc-${data1}`;
+      value = data2 / 127;
+    }
+
+    if (!midiId) return;
+
+    if (this.onLearnCallback) {
+      this.onLearnCallback(midiId);
+      return;
+    }
+
+    const mapping = this.mappings.find(m => m.id === midiId);
+    if (mapping && this.onMessageCallback) {
+      this.onMessageCallback(mapping.action, value);
     }
   }
 
-  private triggerAction(type: string, id: number, value?: number) {
-    if (!this.onMessageCallback) return;
-
-    // Example mappings for a generic controller
-    if (type === 'button') {
-      if (id === 60) this.onMessageCallback('PLAY_PAUSE_A');
-      if (id === 62) this.onMessageCallback('PLAY_PAUSE_B');
-      if (id === 64) this.onMessageCallback('CUE_A');
-      if (id === 65) this.onMessageCallback('CUE_B');
-    } else if (type === 'cc') {
-      if (id === 7) this.onMessageCallback('CROSSFADER', value);
-      if (id === 10) this.onMessageCallback('VOLUME_A', value);
-      if (id === 11) this.onMessageCallback('VOLUME_B', value);
-    }
+  setMappings(mappings: MidiMapping[]) {
+    this.mappings = mappings;
   }
 
-  onMessage(callback: (action: string, params?: any) => void) {
+  getMappings() {
+    return this.mappings;
+  }
+
+  onMessage(callback: (action: string, value?: number) => void) {
     this.onMessageCallback = callback;
+  }
+
+  startLearning(callback: (midiId: string) => void) {
+    this.onLearnCallback = callback;
+  }
+
+  stopLearning() {
+    this.onLearnCallback = null;
   }
 }
 

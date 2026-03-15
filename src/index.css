@@ -25,54 +25,99 @@
 
 .knob-container {
   @apply relative w-12 h-12 rounded-full border-2 border-dj-border flex items-center justify-center cursor-pointer transition-all duration-200;
-  background: conic-gradient(from 180deg at 50% 50%, #1a1b1e 0deg, #2a2b2f 180deg, #1a1b1e 360deg);
+  background: radial-gradient(circle at 30% 30%, #2a2b2f 0%, #1a1b1e 100%);
   box-shadow: 
     inset 0 2px 4px rgba(255,255,255,0.05),
-    0 4px 8px rgba(0,0,0,0.4);
+    0 4px 8px rgba(0,0,0,0.6),
+    0 0 0 1px rgba(0,0,0,0.4);
+}
+
+.knob-container::before {
+  content: '';
+  @apply absolute inset-0 rounded-full opacity-20;
+  background: repeating-conic-gradient(from 0deg, transparent 0deg 10deg, rgba(255,255,255,0.1) 10deg 20deg);
 }
 
 .knob-container:hover {
   @apply border-dj-border-bright;
   box-shadow: 
     inset 0 2px 4px rgba(255,255,255,0.1),
-    0 6px 12px rgba(0,0,0,0.5);
+    0 8px 16px rgba(0,0,0,0.7),
+    0 0 0 1px rgba(255,255,255,0.05);
 }
 
 .knob-indicator {
-  @apply absolute top-1 w-1 h-3 bg-dj-accent rounded-full origin-bottom shadow-[0_0_8px_rgba(0,255,157,0.5)];
+  @apply absolute top-1.5 w-1 h-3 bg-dj-accent rounded-full origin-bottom shadow-[0_0_10px_rgba(0,255,157,0.8)];
+  filter: brightness(1.2);
 }
 
 .fader-track {
-  @apply w-2.5 h-32 bg-black/60 rounded-full relative border border-white/5;
-  box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
+  @apply w-3 h-40 bg-black/80 rounded-sm relative border border-white/10;
+  box-shadow: 
+    inset 2px 2px 5px rgba(0,0,0,0.8),
+    inset -1px -1px 2px rgba(255,255,255,0.05);
 }
 
 .fader-handle {
-  @apply w-7 h-5 bg-zinc-200 rounded-sm absolute left-1/2 -translate-x-1/2 cursor-pointer shadow-xl transition-transform active:scale-95;
-  background: linear-gradient(to bottom, #f4f4f5 0%, #a1a1aa 100%);
-  border: 1px solid rgba(0,0,0,0.2);
+  @apply w-10 h-6 rounded-sm absolute left-1/2 -translate-x-1/2 cursor-pointer shadow-2xl transition-transform active:scale-95 z-10;
+  background: linear-gradient(to bottom, #3f3f46 0%, #18181b 100%);
+  border: 1px solid rgba(255,255,255,0.1);
+  box-shadow: 0 10px 20px rgba(0,0,0,0.8);
 }
 
 .fader-handle::after {
   content: '';
-  @apply absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-0.5 bg-dj-accent/40;
+  @apply absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-0.5 bg-dj-accent shadow-[0_0_8px_rgba(0,255,157,0.6)];
 }
 
 .crossfader-track {
-  @apply w-full h-3 bg-black/60 rounded-full relative border border-white/5;
-  box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
+  @apply w-full h-4 bg-black/80 rounded-sm relative border border-white/10;
+  box-shadow: inset 0 4px 8px rgba(0,0,0,0.8);
 }
 
-.waveform-container {
-  @apply w-full h-24 bg-black/60 rounded-xl overflow-hidden relative border border-white/5;
-  background-image: linear-gradient(to bottom, transparent 0%, rgba(0, 255, 157, 0.02) 100%);
+.crossfader-handle {
+  @apply w-12 h-10 rounded-sm absolute top-1/2 -translate-y-1/2 cursor-pointer shadow-2xl transition-transform active:scale-95 z-10;
+  background: linear-gradient(to bottom, #3f3f46 0%, #18181b 100%);
+  border: 1px solid rgba(255,255,255,0.1);
+  box-shadow: 0 10px 20px rgba(0,0,0,0.8);
 }
 
-.glass-panel {
-  @apply bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl;
+.crossfader-handle::after {
+  content: '';
+  @apply absolute left-1/2 top-0 bottom-0 w-1 bg-dj-accent shadow-[0_0_8px_rgba(0,255,157,0.6)];
 }
 
-.neon-glow {
-  box-shadow: 0 0 15px var(--glow-color, rgba(0, 255, 157, 0.3));
+.lcd-display {
+  @apply bg-black/90 rounded-xl border border-white/5 shadow-inner overflow-hidden font-mono;
+  background-image: 
+    linear-gradient(rgba(0, 255, 157, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 157, 0.03) 1px, transparent 1px);
+  background-size: 4px 4px;
+}
+
+.pro-card {
+  @apply bg-dj-card rounded-[2.5rem] border border-dj-border shadow-[0_30px_60px_-15px_rgba(0,0,0,0.8)];
+  background-image: radial-gradient(circle at 0% 0%, rgba(255,255,255,0.03) 0%, transparent 50%);
+}
+
+.btn-pro {
+  @apply px-4 py-2 rounded-xl font-black uppercase tracking-widest transition-all duration-200 border flex items-center justify-center gap-2;
+}
+
+.btn-pro-primary {
+  @apply bg-dj-accent text-black border-dj-accent hover:scale-105 active:scale-95 shadow-[0_0_20px_rgba(0,255,157,0.3)];
+}
+
+.btn-pro-secondary {
+  @apply bg-white/5 text-white/40 border-white/10 hover:bg-white/10 hover:text-white;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 

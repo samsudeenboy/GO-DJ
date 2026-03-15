@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Deck } from './components/Deck';
 import { Mixer } from './components/Mixer';
-import { Library } from './components/Library';
+import { Browser } from './components/Browser';
 import { AutoDjControls } from './components/AutoDjControls';
 import { Visualizer } from './components/Visualizer';
 import { SettingsModal } from './components/SettingsModal';
 import { Track, SAMPLE_TRACKS } from './constants';
-import { midiService } from './services/midiService';
-import { Zap, Settings, HelpCircle, Maximize2, Monitor, Layout, Radio, Share2 } from 'lucide-react';
+import { midiService, MidiMapping } from './services/midiService';
+import { audioEngine } from './services/audioEngine';
+import { Zap, Settings, HelpCircle, Maximize2, Monitor, Layout, Radio, Share2, Play } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getTransitionAdvice, getAutoDjSuggestion } from './services/geminiService';
 
@@ -65,6 +66,7 @@ export default function App() {
   // AI State
   const [transitionAdvice, setTransitionAdvice] = useState<string | null>(null);
   const [isGettingAdvice, setIsGettingAdvice] = useState(false);
+  const [isEngineStarted, setIsEngineStarted] = useState(false);
 
   // Settings State
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -74,8 +76,56 @@ export default function App() {
     highQualityAudio: true,
     autoStemAnalysis: true,
     showAiAdvice: true,
-    quantize: true
+    quantize: true,
+    midiMappings: midiService.getMappings()
   });
+
+  // Audio Engine Sync
+  useEffect(() => {
+    if (!isEngineStarted) return;
+
+    const interval = setInterval(() => {
+      if (isPlayingA) setCurrentTimeA(audioEngine.getCurrentTime('A'));
+      if (isPlayingB) setCurrentTimeB(audioEngine.getCurrentTime('B'));
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [isEngineStarted, isPlayingA, isPlayingB]);
+
+  useEffect(() => {
+    if (isEngineStarted) {
+      audioEngine.setCrossfader(crossfader);
+    }
+  }, [crossfader, isEngineStarted]);
+
+  useEffect(() => {
+    if (isEngineStarted) {
+      audioEngine.setVolume('A', getDeckVolume('A'));
+      audioEngine.setVolume('B', getDeckVolume('B'));
+    }
+  }, [crossfader, crossfaderCurve, isEngineStarted]);
+
+  useEffect(() => {
+    if (isEngineStarted) {
+      // Map EQ high to a simple filter for demo
+      const freqA = 20000 * Math.pow(10, eqA.high / 20);
+      const freqB = 20000 * Math.pow(10, eqB.high / 20);
+      audioEngine.setFilter('A', Math.min(20000, Math.max(20, freqA)));
+      audioEngine.setFilter('B', Math.min(20000, Math.max(20, freqB)));
+    }
+  }, [eqA.high, eqB.high, isEngineStarted]);
+
+  useEffect(() => {
+    if (isEngineStarted) {
+      audioEngine.setPlaybackRate('A', 1 + pitchA / 100);
+    }
+  }, [pitchA, isEngineStarted]);
+
+  useEffect(() => {
+    if (isEngineStarted) {
+      audioEngine.setPlaybackRate('B', 1 + pitchB / 100);
+    }
+  }, [pitchB, isEngineStarted]);
 
   // MIDI Initialization
   useEffect(() => {
@@ -84,16 +134,21 @@ export default function App() {
       if (success) {
         midiService.onMessage((action, value) => {
           switch (action) {
-            case 'PLAY_PAUSE_A': setIsPlayingA(prev => !prev); break;
-            case 'PLAY_PAUSE_B': setIsPlayingB(prev => !prev); break;
+            case 'PLAY_PAUSE_A': handleTogglePlay('A'); break;
+            case 'PLAY_PAUSE_B': handleTogglePlay('B'); break;
             case 'CROSSFADER': setCrossfader((value || 0) * 2 - 1); break;
-            case 'VOLUME_A': setMasterVolume(value || 0); break; // Simplified for demo
+            case 'VOLUME_A': setMasterVolume(value || 0); break;
+            case 'VOLUME_B': setMasterVolume(value || 0); break; // Simplified
           }
         });
       }
     };
     initMidi();
-  }, []);
+  }, [isEngineStarted]); // Re-bind when engine starts to ensure handlers work
+
+  useEffect(() => {
+    midiService.setMappings(settings.midiMappings);
+  }, [settings.midiMappings]);
 
   // Audio Refs (Simulating Audio Engine)
   const timerA = useRef<number | null>(null);
@@ -140,7 +195,7 @@ export default function App() {
         const nextTrack = SAMPLE_TRACKS.find(t => t.id === suggestion.trackId) || SAMPLE_TRACKS[0];
         const targetDeck = activeDeck === 'A' ? 'B' : 'A';
         
-        handleLoadTrack(nextTrack, targetDeck);
+        handleLoadTrack(targetDeck, nextTrack);
         
         // Start playing next deck
         if (targetDeck === 'A') setIsPlayingA(true);
@@ -170,16 +225,48 @@ export default function App() {
     checkTransition();
   }, [isAutoDjActive, currentTimeA, currentTimeB, isPlayingA, isPlayingB, deckA, deckB, autoDjMood]);
 
-  const handleLoadTrack = (track: Track, deck: 'A' | 'B') => {
-    if (deck === 'A') {
-      setDeckA(track);
-      setCurrentTimeA(0);
-      setIsPlayingA(false);
-    } else {
-      setDeckB(track);
-      setCurrentTimeB(0);
-      setIsPlayingB(false);
+  const handleLoadTrack = async (deck: 'A' | 'B', track: Track) => {
+    if (!isEngineStarted) return;
+
+    try {
+      const duration = await audioEngine.loadTrack(deck, track.url);
+      const updatedTrack = { ...track, duration };
+
+      if (deck === 'A') {
+        setDeckA(updatedTrack);
+        setCurrentTimeA(0);
+        setIsPlayingA(false);
+        audioEngine.pause('A');
+      } else {
+        setDeckB(updatedTrack);
+        setCurrentTimeB(0);
+        setIsPlayingB(false);
+        audioEngine.pause('B');
+      }
+    } catch (error) {
+      console.error('Failed to load track:', error);
     }
+  };
+
+  const handleTogglePlay = (deck: 'A' | 'B') => {
+    if (!isEngineStarted) return;
+
+    if (deck === 'A') {
+      const newState = !isPlayingA;
+      setIsPlayingA(newState);
+      if (newState) audioEngine.play('A');
+      else audioEngine.pause('A');
+    } else {
+      const newState = !isPlayingB;
+      setIsPlayingB(newState);
+      if (newState) audioEngine.play('B');
+      else audioEngine.pause('B');
+    }
+  };
+
+  const handleStartEngine = async () => {
+    await audioEngine.start();
+    setIsEngineStarted(true);
   };
 
   const handleGetTransitionAdvice = async () => {
@@ -224,77 +311,105 @@ export default function App() {
       <motion.header 
         initial={{ y: -50, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        className="h-14 border-b border-dj-border flex items-center justify-between px-6 bg-dj-card/50 backdrop-blur-md z-20"
+        className="h-24 border-b border-white/5 flex items-center justify-between px-10 bg-black/40 backdrop-blur-3xl z-50 relative"
       >
-        <div className="flex items-center gap-3">
-          <motion.div 
-            whileHover={{ scale: 1.1, rotate: 5 }}
-            whileTap={{ scale: 0.9 }}
-            className="w-8 h-8 rounded bg-dj-accent flex items-center justify-center text-black shadow-[0_0_15px_rgba(0,255,157,0.4)]"
-          >
-            <Zap size={20} fill="currentColor" />
-          </motion.div>
-          <h1 className="font-bold tracking-tighter text-xl">GO <span className="text-dj-accent">DJ</span></h1>
-        </div>
-        
-        {/* Master Meter */}
-        <div className="flex-1 max-w-md mx-8 flex items-center gap-2 px-4 py-1.5 bg-black/40 rounded-full border border-white/5">
-          <div className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden flex gap-0.5 p-0.5">
-            {Array.from({ length: 20 }).map((_, i) => (
-              <motion.div 
-                key={i}
-                animate={{ 
-                  opacity: (isPlayingA || isPlayingB) ? [0.2, 1, 0.2] : 0.2,
-                  backgroundColor: i > 15 ? '#ff0055' : i > 12 ? '#ff8c00' : '#00ff9d'
-                }}
-                transition={{ 
-                  duration: 0.1, 
-                  repeat: Infinity, 
-                  delay: i * 0.02,
-                  repeatType: "reverse"
-                }}
-                className="flex-1 h-full rounded-full"
-              />
-            ))}
-          </div>
-          <span className="text-[8px] font-mono text-white/40">MST</span>
-        </div>
+        <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-dj-accent/20 to-transparent" />
         
         <div className="flex items-center gap-6">
           <motion.div 
-            animate={{ 
-              borderColor: isSandboxMode ? '#ff8c00' : isAutoDjActive ? '#a855f7' : '#00ff9d',
-              backgroundColor: isSandboxMode ? 'rgba(255,140,0,0.1)' : isAutoDjActive ? 'rgba(168,85,247,0.1)' : 'rgba(0,255,157,0.1)'
-            }}
-            className="flex items-center gap-2 px-3 py-1 rounded-full border"
+            whileHover={{ scale: 1.1, rotate: 5 }}
+            whileTap={{ scale: 0.9 }}
+            className="w-12 h-12 rounded-2xl bg-dj-accent flex items-center justify-center text-black shadow-[0_0_30px_rgba(0,255,157,0.4)]"
           >
-            <div className={`w-2 h-2 rounded-full ${isSandboxMode ? 'bg-orange-500 animate-pulse' : isAutoDjActive ? 'bg-purple-500 animate-ping' : 'bg-dj-accent animate-pulse'}`} />
-            <span className="text-[10px] font-bold text-white/60 tracking-widest uppercase">
-              {isSandboxMode ? 'Sandbox Mode' : isAutoDjActive ? 'Auto-DJ Active' : 'Engine Ready'}
-            </span>
+            <Zap size={28} fill="currentColor" />
           </motion.div>
-          <div className="flex gap-4 text-white/40">
-            <motion.div whileHover={{ scale: 1.2, color: '#fff' }} whileTap={{ scale: 0.9 }}>
+          <div className="flex flex-col">
+            <h1 className="font-black tracking-tighter text-3xl leading-none">GO <span className="text-dj-accent">DJ</span></h1>
+            <span className="text-[10px] font-black text-white/20 tracking-[0.4em] uppercase">Pro Performance System</span>
+          </div>
+        </div>
+        
+        {/* Master Meter & Status */}
+        <div className="flex-1 max-w-3xl mx-16 flex items-center gap-8 px-8 py-3 bg-black/60 rounded-[2rem] border border-white/5 shadow-inner relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-[1px] bg-white/5" />
+          
+          <div className="flex flex-col gap-2 flex-1">
+            <div className="flex justify-between items-center px-1">
+              <span className="text-[8px] font-black text-white/20 uppercase tracking-widest">Master Output</span>
+              <span className="text-[8px] font-black text-dj-accent uppercase tracking-widest">Peak: -0.2dB</span>
+            </div>
+            <div className="h-3 bg-zinc-900 rounded-full overflow-hidden flex gap-1 p-0.5 border border-white/5">
+              {Array.from({ length: 50 }).map((_, i) => (
+                <motion.div 
+                  key={i}
+                  animate={{ 
+                    opacity: (isPlayingA || isPlayingB) ? [0.2, 1, 0.2] : 0.2,
+                    backgroundColor: i > 45 ? '#ff0055' : i > 40 ? '#ff8c00' : '#00ff9d'
+                  }}
+                  transition={{ 
+                    duration: 0.1, 
+                    repeat: Infinity, 
+                    delay: i * 0.01,
+                    repeatType: "reverse"
+                  }}
+                  className="flex-1 h-full rounded-full"
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className="w-px h-10 bg-white/10" />
+
+          <div className="flex items-center gap-6">
+            <div className="flex flex-col items-center">
+              <span className="text-[16px] font-black font-mono text-white/90">44.1</span>
+              <span className="text-[8px] font-black text-white/20 uppercase tracking-tighter">kHz</span>
+            </div>
+            <div className="flex flex-col items-center">
+              <span className="text-[16px] font-black font-mono text-white/90">24</span>
+              <span className="text-[8px] font-black text-white/20 uppercase tracking-tighter">Bit</span>
+            </div>
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-10">
+          <div className="flex items-center gap-4">
+            <motion.div 
+              animate={{ 
+                borderColor: isSandboxMode ? '#ff8c00' : isAutoDjActive ? '#a855f7' : '#00ff9d',
+                backgroundColor: isSandboxMode ? 'rgba(255,140,0,0.1)' : isAutoDjActive ? 'rgba(168,85,247,0.1)' : 'rgba(0,255,157,0.1)'
+              }}
+              className="flex items-center gap-3 px-6 py-2 rounded-2xl border transition-colors"
+            >
+              <div className={`w-2.5 h-2.5 rounded-full ${isSandboxMode ? 'bg-orange-500 animate-pulse' : isAutoDjActive ? 'bg-purple-500 animate-ping' : 'bg-dj-accent animate-pulse'}`} />
+              <span className="text-[12px] font-black text-white/80 tracking-widest uppercase">
+                {isSandboxMode ? 'Sandbox' : isAutoDjActive ? 'Auto-DJ' : 'Live'}
+              </span>
+            </motion.div>
+          </div>
+
+          <div className="flex gap-6 text-white/30">
+            <motion.button whileHover={{ scale: 1.2, color: '#00ff9d' }} whileTap={{ scale: 0.9 }}>
               <Monitor 
-                size={18} 
+                size={22} 
                 className={`cursor-pointer transition-colors ${vizMode !== 'ambient' ? 'text-dj-accent' : ''}`}
                 onClick={() => setVizMode(prev => prev === 'psychedelic' ? 'tunnel' : prev === 'tunnel' ? 'equalizer' : 'psychedelic')}
               />
-            </motion.div>
-            <motion.div whileHover={{ scale: 1.2, color: '#fff' }} whileTap={{ scale: 0.9 }}>
+            </motion.button>
+            <motion.button whileHover={{ scale: 1.2, color: '#00ff9d' }} whileTap={{ scale: 0.9 }}>
               <Layout 
-                size={18} 
+                size={22} 
                 className={`cursor-pointer transition-all ${layoutMode !== 'standard' ? 'text-dj-accent' : ''}`} 
                 onClick={() => setLayoutMode(prev => prev === 'standard' ? 'expanded' : prev === 'expanded' ? 'minimal' : 'standard')}
               />
-            </motion.div>
-            <motion.div whileHover={{ scale: 1.2, color: '#fff' }} whileTap={{ scale: 0.9 }}>
+            </motion.button>
+            <motion.button whileHover={{ scale: 1.2, color: '#00ff9d' }} whileTap={{ scale: 0.9 }}>
               <Settings 
-                size={18} 
+                size={22} 
                 className={`cursor-pointer transition-all ${isSettingsOpen ? 'text-dj-accent rotate-90' : ''}`} 
                 onClick={() => setIsSettingsOpen(true)}
               />
-            </motion.div>
+            </motion.button>
           </div>
         </div>
       </motion.header>
@@ -307,23 +422,26 @@ export default function App() {
       />
 
       {/* Main Work Area */}
-      <main className={`flex-1 flex overflow-hidden transition-all duration-500 ${layoutMode === 'minimal' ? 'scale-95 opacity-50 grayscale' : ''}`}>
+      <main className={`flex-1 flex overflow-hidden transition-all duration-700 p-6 gap-6 ${layoutMode === 'minimal' ? 'scale-[0.98] opacity-50 grayscale' : ''}`}>
         {/* Deck A */}
         <motion.div 
           layout
-          className={`flex-1 p-6 flex flex-col transition-all duration-500 ${layoutMode === 'expanded' ? 'flex-[1.5]' : ''}`}
+          className={`flex-1 flex flex-col transition-all duration-700 ${layoutMode === 'expanded' ? 'flex-[1.8]' : ''}`}
         >
           <Deck 
             id="A"
             track={deckA}
             isPlaying={isPlayingA}
-            onTogglePlay={() => setIsPlayingA(!isPlayingA)}
+            onTogglePlay={() => handleTogglePlay('A')}
             volume={getDeckVolume('A')}
             pitch={pitchA}
             onPitchChange={setPitchA}
             currentTime={currentTimeA}
             duration={deckA?.duration || 0}
-            onSeek={setCurrentTimeA}
+            onSeek={(time) => {
+              setCurrentTimeA(time);
+              audioEngine.seek('A', time);
+            }}
             onBpmDetected={setBaseBpmA}
             stems={stemsA}
             onStemsChange={(param, val) => setStemsA(prev => ({ ...prev, [param]: val }))}
@@ -332,67 +450,57 @@ export default function App() {
           />
         </motion.div>
 
-        {/* Mixer */}
-        <motion.div 
-          layout
-          className={`flex flex-col gap-4 py-6 transition-all duration-500 ${layoutMode === 'minimal' ? 'w-40' : ''}`}
-        >
-          <Mixer 
-            crossfader={crossfader}
-            onCrossfaderChange={setCrossfader}
-            curve={crossfaderCurve}
-            onCurveChange={setCrossfaderCurve}
-            masterVolume={masterVolume}
-            onMasterVolumeChange={setMasterVolume}
-            eqA={eqA}
-            eqB={eqB}
-            onEqChange={(deck, param, val) => {
-              if (deck === 'A') setEqA(prev => ({ ...prev, [param]: val }));
-              else setEqB(prev => ({ ...prev, [param]: val }));
-            }}
-            stemsA={stemsA}
-            stemsB={stemsB}
-            onStemsChange={(deck, param, val) => {
-              if (deck === 'A') setStemsA(prev => ({ ...prev, [param]: val }));
-              else setStemsB(prev => ({ ...prev, [param]: val }));
-            }}
-            isModernEqMode={isModernEqMode}
-            onModernEqToggle={() => setIsModernEqMode(!isModernEqMode)}
-            isSyncEnabled={isSyncEnabled}
-            onSyncToggle={() => setIsSyncEnabled(!isSyncEnabled)}
-            lightingIntensity={lightingIntensity}
-            onLightingChange={setLightingIntensity}
-            samplerVolume={samplerVolume}
-            onSamplerVolumeChange={setSamplerVolume}
-            isQuantizeEnabled={settings.quantize}
-            onQuantizeToggle={() => setSettings(prev => ({ ...prev, quantize: !prev.quantize }))}
-          />
-          
-          <AutoDjControls 
-            isActive={isAutoDjActive}
-            onToggle={setIsAutoDjActive}
-            mood={autoDjMood}
-            onMoodChange={setAutoDjMood}
-            nextTrackReason={autoDjReason}
-          />
-        </motion.div>
+        {/* Mixer Center */}
+        <Mixer 
+          crossfader={crossfader}
+          onCrossfaderChange={setCrossfader}
+          curve={crossfaderCurve}
+          onCurveChange={setCrossfaderCurve}
+          masterVolume={masterVolume}
+          onMasterVolumeChange={setMasterVolume}
+          eqA={eqA}
+          eqB={eqB}
+          onEqChange={(deck, param, val) => {
+            if (deck === 'A') setEqA(prev => ({ ...prev, [param]: val }));
+            else setEqB(prev => ({ ...prev, [param]: val }));
+          }}
+          stemsA={stemsA}
+          stemsB={stemsB}
+          onStemsChange={(deck, param, val) => {
+            if (deck === 'A') setStemsA(prev => ({ ...prev, [param]: val }));
+            else setStemsB(prev => ({ ...prev, [param]: val }));
+          }}
+          isModernEqMode={isModernEqMode}
+          onModernEqToggle={() => setIsModernEqMode(!isModernEqMode)}
+          isSyncEnabled={isSyncEnabled}
+          onSyncToggle={() => setIsSyncEnabled(!isSyncEnabled)}
+          lightingIntensity={lightingIntensity}
+          onLightingChange={setLightingIntensity}
+          samplerVolume={samplerVolume}
+          onSamplerVolumeChange={setSamplerVolume}
+          isQuantizeEnabled={settings.quantize}
+          onQuantizeToggle={() => setSettings(prev => ({ ...prev, quantize: !prev.quantize }))}
+        />
 
         {/* Deck B */}
         <motion.div 
           layout
-          className={`flex-1 p-6 flex flex-col transition-all duration-500 ${layoutMode === 'expanded' ? 'flex-[1.5]' : ''}`}
+          className={`flex-1 flex flex-col transition-all duration-700 ${layoutMode === 'expanded' ? 'flex-[1.8]' : ''}`}
         >
           <Deck 
             id="B"
             track={deckB}
             isPlaying={isPlayingB}
-            onTogglePlay={() => setIsPlayingB(!isPlayingB)}
+            onTogglePlay={() => handleTogglePlay('B')}
             volume={getDeckVolume('B')}
             pitch={pitchB}
             onPitchChange={setPitchB}
             currentTime={currentTimeB}
             duration={deckB?.duration || 0}
-            onSeek={setCurrentTimeB}
+            onSeek={(time) => {
+              setCurrentTimeB(time);
+              audioEngine.seek('B', time);
+            }}
             onBpmDetected={setBaseBpmB}
             stems={stemsB}
             onStemsChange={(param, val) => setStemsB(prev => ({ ...prev, [param]: val }))}
@@ -433,16 +541,59 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Library */}
-      <Library onLoadTrack={handleLoadTrack} />
+      {/* Browser */}
+      <div className="h-96 border-t border-white/5 bg-black/40 p-6">
+        <Browser onLoadTrack={handleLoadTrack} currentTracks={{ A: deckA, B: deckB }} />
+      </div>
+
+      <AnimatePresence>
+        {!isEngineStarted && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-xl flex flex-col items-center justify-center gap-8"
+          >
+            <motion.div 
+              animate={{ 
+                scale: [1, 1.1, 1],
+                rotate: [0, 5, -5, 0]
+              }}
+              transition={{ duration: 4, repeat: Infinity }}
+              className="w-32 h-32 rounded-3xl bg-dj-accent flex items-center justify-center text-black shadow-[0_0_50px_rgba(0,255,157,0.3)]"
+            >
+              <Zap size={64} fill="currentColor" />
+            </motion.div>
+            
+            <div className="text-center space-y-2">
+              <h2 className="text-3xl font-black uppercase tracking-[0.3em] text-white">Initialize Engine</h2>
+              <p className="text-xs font-bold text-white/40 uppercase tracking-widest">Click to activate Web Audio & Tone.js processing</p>
+            </div>
+
+            <button 
+              onClick={handleStartEngine}
+              className="group relative px-12 py-4 bg-dj-accent text-black font-black uppercase tracking-[0.2em] rounded-2xl shadow-2xl hover:scale-110 transition-all"
+            >
+              <div className="absolute inset-0 bg-white/20 rounded-2xl animate-ping group-hover:block hidden" />
+              Start GO DJ
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
       
       {/* Footer Status */}
-      <footer className="h-8 bg-black border-t border-dj-border flex items-center justify-between px-6 text-[10px] text-white/30 uppercase tracking-[0.2em]">
-        <div className="flex gap-4">
-          <span>CPU: 12%</span>
-          <span>LATENCY: 4MS</span>
+      <footer className="h-10 bg-black border-t border-white/5 flex items-center justify-between px-10 text-[11px] text-white/30 uppercase tracking-[0.3em] font-black">
+        <div className="flex gap-8">
+          <div className="flex items-center gap-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-dj-accent" />
+            <span>CPU: 12%</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-dj-accent" />
+            <span>LATENCY: 4MS</span>
+          </div>
         </div>
-        <div className="flex gap-4">
+        <div className="flex gap-8">
           <span className={isAutoDjActive ? 'text-purple-500' : ''}>AUTO-DJ: {isAutoDjActive ? 'ON' : 'OFF'}</span>
           <span className={settings.quantize ? 'text-dj-accent' : ''}>QUANTIZE: {settings.quantize ? 'ON' : 'OFF'}</span>
         </div>

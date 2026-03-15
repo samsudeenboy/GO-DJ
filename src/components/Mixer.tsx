@@ -193,33 +193,64 @@ export const Mixer: React.FC<MixerProps> = ({
     <motion.div 
       initial={{ x: 20, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
-      className="w-85 bg-dj-card border-l border-dj-border flex flex-col p-5 gap-5 shadow-2xl z-20 overflow-y-auto scrollbar-hide relative group/mixer"
+      className="w-[450px] pro-card p-8 flex flex-col gap-8 relative overflow-hidden group/mixer"
     >
+      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+      
+      {/* Mixer Header */}
+      <div className="flex justify-between items-center z-10">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
+            <Settings2 className="text-white/40" />
+          </div>
+          <div>
+            <h2 className="text-xl font-black tracking-widest uppercase text-white/90">Master Mixer</h2>
+            <p className="text-[10px] font-black text-white/20 uppercase tracking-[0.3em]">4-Channel Control</p>
+          </div>
+        </div>
+        <div className="flex gap-3">
+          <motion.button 
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white/40 hover:text-white transition-all"
+          >
+            <Mic size={18} />
+          </motion.button>
+          <motion.button 
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white/40 hover:text-white transition-all"
+          >
+            <Headphones size={18} />
+          </motion.button>
+        </div>
+      </div>
+
       {/* Master Section */}
-      <div className="bg-black/60 rounded-2xl p-4 border border-white/5 shadow-inner relative overflow-hidden">
+      <div className="bg-black/60 rounded-[2rem] p-6 border border-white/5 shadow-inner relative overflow-hidden">
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-white/5 to-transparent" />
-        <div className="flex justify-between items-center mb-4">
-          <div className="flex flex-col items-center gap-1.5">
-            <div className="text-[7px] font-black text-dj-accent tracking-[0.2em] uppercase opacity-50">Master</div>
+        <div className="flex justify-between items-center mb-6">
+          <div className="flex flex-col items-center gap-2">
+            <div className="text-[8px] font-black text-dj-accent tracking-[0.2em] uppercase opacity-50">Master</div>
             {renderKnob('', masterVolume, onMasterVolumeChange, 'bg-white')}
           </div>
-          <div className="flex flex-col items-center gap-1.5">
-            <div className="text-[7px] font-black text-orange-400 tracking-[0.2em] uppercase opacity-50">Sampler</div>
+          <div className="flex flex-col items-center gap-2">
+            <div className="text-[8px] font-black text-orange-400 tracking-[0.2em] uppercase opacity-50">Sampler</div>
             {renderKnob('', samplerVolume, onSamplerVolumeChange, 'bg-orange-500')}
           </div>
-          <div className="flex flex-col items-center gap-1.5">
-            <div className="text-[7px] font-black text-purple-400 tracking-[0.2em] uppercase opacity-50">Light</div>
+          <div className="flex flex-col items-center gap-2">
+            <div className="text-[8px] font-black text-purple-400 tracking-[0.2em] uppercase opacity-50">Light</div>
             {renderKnob('', lightingIntensity, onLightingChange, 'bg-purple-500')}
           </div>
         </div>
         
-        <div className="flex flex-col gap-3">
-          <div className="grid grid-cols-2 gap-2">
+        <div className="flex flex-col gap-4">
+          <div className="grid grid-cols-2 gap-3">
             <motion.button 
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={onSyncToggle}
-              className={`py-2 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all border ${isSyncEnabled ? 'bg-dj-accent text-black border-dj-accent shadow-[0_0_15px_rgba(0,255,157,0.3)]' : 'bg-white/5 text-white/40 border-white/10'}`}
+              className={`py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border ${isSyncEnabled ? 'bg-dj-accent text-black border-dj-accent shadow-[0_0_20px_rgba(0,255,157,0.4)]' : 'bg-white/5 text-white/40 border-white/10'}`}
             >
               SYNC
             </motion.button>
@@ -227,88 +258,98 @@ export const Mixer: React.FC<MixerProps> = ({
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={onQuantizeToggle}
-              className={`py-2 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all border ${isQuantizeEnabled ? 'bg-dj-accent-secondary text-white border-dj-accent-secondary shadow-[0_0_15px_rgba(255,0,85,0.3)]' : 'bg-white/5 text-white/40 border-white/10'}`}
+              className={`py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border ${isQuantizeEnabled ? 'bg-dj-accent-secondary text-white border-dj-accent-secondary shadow-[0_0_20px_rgba(255,0,85,0.4)]' : 'bg-white/5 text-white/40 border-white/10'}`}
             >
               QUANTIZE
             </motion.button>
           </div>
-          <div className="bg-black/80 rounded-xl p-2 border border-white/5 flex items-center justify-between shadow-inner">
-            <Cpu size={12} className="text-dj-accent" />
-            <span className="text-[7px] text-white/40 font-black uppercase tracking-widest">PIONEER DDJ-1000 CONNECTED</span>
-            <motion.div 
-              animate={{ opacity: [0.3, 1, 0.3] }}
-              transition={{ duration: 1.5, repeat: Infinity }}
-              className="w-2 h-2 rounded-full bg-dj-accent shadow-[0_0_8px_rgba(0,255,157,0.5)]" 
-            />
+          <div className="bg-black/90 rounded-2xl p-3 border border-white/5 flex items-center justify-between shadow-inner">
+            <div className="flex items-center gap-3">
+              <Cpu size={14} className="text-dj-accent" />
+              <span className="text-[8px] text-white/40 font-black uppercase tracking-[0.2em]">PIONEER DDJ-1000</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[6px] text-dj-accent font-black uppercase">Online</span>
+              <motion.div 
+                animate={{ opacity: [0.3, 1, 0.3], scale: [1, 1.2, 1] }}
+                transition={{ duration: 1.5, repeat: Infinity }}
+                className="w-2.5 h-2.5 rounded-full bg-dj-accent shadow-[0_0_10px_rgba(0,255,157,0.8)]" 
+              />
+            </div>
           </div>
         </div>
       </div>
 
       {/* EQ Section */}
-      <div className="bg-black/40 rounded-2xl p-4 border border-white/5 shadow-inner relative overflow-hidden">
+      <div className="bg-black/40 rounded-[2.5rem] p-8 border border-white/5 shadow-inner relative overflow-hidden flex-1">
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-white/5 to-transparent" />
-        <div className="flex items-center justify-between mb-4 px-1">
-          <div className="text-[9px] font-black text-white/30 uppercase tracking-[0.2em]">
-            {isModernEqMode ? 'Modern (Stems)' : 'Standard EQ'}
+        <div className="flex items-center justify-between mb-8 px-2">
+          <div className="flex flex-col">
+            <div className="text-[10px] font-black text-white/80 uppercase tracking-[0.2em]">
+              {isModernEqMode ? 'Stem Separation' : 'Frequency EQ'}
+            </div>
+            <div className="text-[7px] font-black text-white/20 uppercase tracking-[0.3em] mt-1">Advanced DSP Engine</div>
           </div>
           <motion.button 
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={onModernEqToggle}
-            className={`px-3 py-1 rounded-full text-[7px] font-black transition-all border tracking-widest ${isModernEqMode ? 'bg-purple-500 text-white border-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.3)]' : 'bg-white/5 text-white/40 border-white/10'}`}
+            className={`px-5 py-2 rounded-xl text-[8px] font-black transition-all border tracking-[0.2em] ${isModernEqMode ? 'bg-purple-500 text-white border-purple-400 shadow-[0_0_20px_rgba(168,85,247,0.4)]' : 'bg-white/5 text-white/40 border-white/10'}`}
           >
             {isModernEqMode ? 'STEMS' : 'FREQ'}
           </motion.button>
         </div>
         
-        <div className="flex justify-between gap-6">
-          <div className="flex flex-col gap-4 flex-1">
-            <div className="text-[8px] font-black text-white/10 uppercase tracking-[0.3em] text-center mb-1">Deck A</div>
+        <div className="flex justify-between gap-10 h-full">
+          <div className="flex flex-col gap-6 flex-1">
+            <div className="text-[9px] font-black text-white/20 uppercase tracking-[0.4em] text-center mb-2">Channel A</div>
             {isModernEqMode ? (
-              <div className="space-y-4">
-                {renderKnob('VOC', stemsA.vocals, (v) => onStemsChange('A', 'vocals', v), 'bg-purple-400')}
-                {renderKnob('DRM', stemsA.drums, (v) => onStemsChange('A', 'drums', v), 'bg-blue-400')}
-                {renderKnob('BS', stemsA.bass, (v) => onStemsChange('A', 'bass', v), 'bg-emerald-400')}
+              <div className="space-y-6">
+                {renderKnob('VOCALS', stemsA.vocals, (v) => onStemsChange('A', 'vocals', v), 'bg-dj-accent-blue')}
+                {renderKnob('DRUMS', stemsA.drums, (v) => onStemsChange('A', 'drums', v), 'bg-dj-accent-secondary')}
+                {renderKnob('BASS', stemsA.bass, (v) => onStemsChange('A', 'bass', v), 'bg-dj-accent')}
               </div>
             ) : (
-              <div className="space-y-4">
-                <div className="flex items-center justify-center gap-3">
-                  {renderKnob('HI', eqA.high, (v) => onEqChange('A', 'high', v))}
+              <div className="space-y-6">
+                <div className="flex items-center justify-center gap-4">
+                  {renderKnob('HIGH', eqA.high, (v) => onEqChange('A', 'high', v))}
                   <KillButton active={eqA.high === -1} onClick={() => handleEqKill('A', 'high')} />
                 </div>
-                <div className="flex items-center justify-center gap-3">
+                <div className="flex items-center justify-center gap-4">
                   {renderKnob('MID', eqA.mid, (v) => onEqChange('A', 'mid', v))}
                   <KillButton active={eqA.mid === -1} onClick={() => handleEqKill('A', 'mid')} />
                 </div>
-                <div className="flex items-center justify-center gap-3">
+                <div className="flex items-center justify-center gap-4">
                   {renderKnob('LOW', eqA.low, (v) => onEqChange('A', 'low', v))}
                   <KillButton active={eqA.low === -1} onClick={() => handleEqKill('A', 'low')} />
                 </div>
               </div>
             )}
           </div>
-          <div className="w-px bg-white/5 my-2 shadow-[1px_0_0_rgba(255,255,255,0.02)]" />
-          <div className="flex flex-col gap-4 flex-1">
-            <div className="text-[8px] font-black text-white/10 uppercase tracking-[0.3em] text-center mb-1">Deck B</div>
+          
+          <div className="w-px bg-white/5 my-4 shadow-[1px_0_0_rgba(255,255,255,0.02)]" />
+          
+          <div className="flex flex-col gap-6 flex-1">
+            <div className="text-[9px] font-black text-white/20 uppercase tracking-[0.4em] text-center mb-2">Channel B</div>
             {isModernEqMode ? (
-              <div className="space-y-4">
-                {renderKnob('VOC', stemsB.vocals, (v) => onStemsChange('B', 'vocals', v), 'bg-purple-400')}
-                {renderKnob('DRM', stemsB.drums, (v) => onStemsChange('B', 'drums', v), 'bg-blue-400')}
-                {renderKnob('BS', stemsB.bass, (v) => onStemsChange('B', 'bass', v), 'bg-emerald-400')}
+              <div className="space-y-6">
+                {renderKnob('VOCALS', stemsB.vocals, (v) => onStemsChange('B', 'vocals', v), 'bg-dj-accent-blue')}
+                {renderKnob('DRUMS', stemsB.drums, (v) => onStemsChange('B', 'drums', v), 'bg-dj-accent-secondary')}
+                {renderKnob('BASS', stemsB.bass, (v) => onStemsChange('B', 'bass', v), 'bg-dj-accent')}
               </div>
             ) : (
-              <div className="space-y-4">
-                <div className="flex items-center justify-center gap-3">
+              <div className="space-y-6">
+                <div className="flex items-center justify-center gap-4">
+                  {renderKnob('HIGH', eqB.high, (v) => onEqChange('B', 'high', v))}
                   <KillButton active={eqB.high === -1} onClick={() => handleEqKill('B', 'high')} />
-                  {renderKnob('HI', eqB.high, (v) => onEqChange('B', 'high', v))}
                 </div>
-                <div className="flex items-center justify-center gap-3">
-                  <KillButton active={eqB.mid === -1} onClick={() => handleEqKill('B', 'mid')} />
+                <div className="flex items-center justify-center gap-4">
                   {renderKnob('MID', eqB.mid, (v) => onEqChange('B', 'mid', v))}
+                  <KillButton active={eqB.mid === -1} onClick={() => handleEqKill('B', 'mid')} />
                 </div>
-                <div className="flex items-center justify-center gap-3">
-                  <KillButton active={eqB.low === -1} onClick={() => handleEqKill('B', 'low')} />
+                <div className="flex items-center justify-center gap-4">
                   {renderKnob('LOW', eqB.low, (v) => onEqChange('B', 'low', v))}
+                  <KillButton active={eqB.low === -1} onClick={() => handleEqKill('B', 'low')} />
                 </div>
               </div>
             )}
