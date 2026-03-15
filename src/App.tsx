@@ -4,7 +4,9 @@ import { Mixer } from './components/Mixer';
 import { Library } from './components/Library';
 import { AutoDjControls } from './components/AutoDjControls';
 import { Visualizer } from './components/Visualizer';
+import { SettingsModal } from './components/SettingsModal';
 import { Track, SAMPLE_TRACKS } from './constants';
+import { midiService } from './services/midiService';
 import { Zap, Settings, HelpCircle, Maximize2, Monitor, Layout, Radio, Share2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getTransitionAdvice, getAutoDjSuggestion } from './services/geminiService';
@@ -63,6 +65,35 @@ export default function App() {
   // AI State
   const [transitionAdvice, setTransitionAdvice] = useState<string | null>(null);
   const [isGettingAdvice, setIsGettingAdvice] = useState(false);
+
+  // Settings State
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [layoutMode, setLayoutMode] = useState<'standard' | 'expanded' | 'minimal'>('standard');
+  const [settings, setSettings] = useState({
+    masterLimiter: true,
+    highQualityAudio: true,
+    autoStemAnalysis: true,
+    showAiAdvice: true,
+    quantize: true
+  });
+
+  // MIDI Initialization
+  useEffect(() => {
+    const initMidi = async () => {
+      const success = await midiService.initialize();
+      if (success) {
+        midiService.onMessage((action, value) => {
+          switch (action) {
+            case 'PLAY_PAUSE_A': setIsPlayingA(prev => !prev); break;
+            case 'PLAY_PAUSE_B': setIsPlayingB(prev => !prev); break;
+            case 'CROSSFADER': setCrossfader((value || 0) * 2 - 1); break;
+            case 'VOLUME_A': setMasterVolume(value || 0); break; // Simplified for demo
+          }
+        });
+      }
+    };
+    initMidi();
+  }, []);
 
   // Audio Refs (Simulating Audio Engine)
   const timerA = useRef<number | null>(null);
@@ -190,38 +221,98 @@ export default function App() {
       />
       
       {/* Top Header */}
-      <header className="h-14 border-b border-dj-border flex items-center justify-between px-6 bg-dj-card/50 backdrop-blur-md z-20">
+      <motion.header 
+        initial={{ y: -50, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        className="h-14 border-b border-dj-border flex items-center justify-between px-6 bg-dj-card/50 backdrop-blur-md z-20"
+      >
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded bg-dj-accent flex items-center justify-center text-black">
+          <motion.div 
+            whileHover={{ scale: 1.1, rotate: 5 }}
+            whileTap={{ scale: 0.9 }}
+            className="w-8 h-8 rounded bg-dj-accent flex items-center justify-center text-black shadow-[0_0_15px_rgba(0,255,157,0.4)]"
+          >
             <Zap size={20} fill="currentColor" />
+          </motion.div>
+          <h1 className="font-bold tracking-tighter text-xl">GO <span className="text-dj-accent">DJ</span></h1>
+        </div>
+        
+        {/* Master Meter */}
+        <div className="flex-1 max-w-md mx-8 flex items-center gap-2 px-4 py-1.5 bg-black/40 rounded-full border border-white/5">
+          <div className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden flex gap-0.5 p-0.5">
+            {Array.from({ length: 20 }).map((_, i) => (
+              <motion.div 
+                key={i}
+                animate={{ 
+                  opacity: (isPlayingA || isPlayingB) ? [0.2, 1, 0.2] : 0.2,
+                  backgroundColor: i > 15 ? '#ff0055' : i > 12 ? '#ff8c00' : '#00ff9d'
+                }}
+                transition={{ 
+                  duration: 0.1, 
+                  repeat: Infinity, 
+                  delay: i * 0.02,
+                  repeatType: "reverse"
+                }}
+                className="flex-1 h-full rounded-full"
+              />
+            ))}
           </div>
-          <h1 className="font-bold tracking-tighter text-xl">AURA <span className="text-dj-accent">AI DJ</span></h1>
+          <span className="text-[8px] font-mono text-white/40">MST</span>
         </div>
         
         <div className="flex items-center gap-6">
-          <div className="flex items-center gap-2 bg-black/40 px-3 py-1 rounded-full border border-white/5">
+          <motion.div 
+            animate={{ 
+              borderColor: isSandboxMode ? '#ff8c00' : isAutoDjActive ? '#a855f7' : '#00ff9d',
+              backgroundColor: isSandboxMode ? 'rgba(255,140,0,0.1)' : isAutoDjActive ? 'rgba(168,85,247,0.1)' : 'rgba(0,255,157,0.1)'
+            }}
+            className="flex items-center gap-2 px-3 py-1 rounded-full border"
+          >
             <div className={`w-2 h-2 rounded-full ${isSandboxMode ? 'bg-orange-500 animate-pulse' : isAutoDjActive ? 'bg-purple-500 animate-ping' : 'bg-dj-accent animate-pulse'}`} />
             <span className="text-[10px] font-bold text-white/60 tracking-widest uppercase">
               {isSandboxMode ? 'Sandbox Mode' : isAutoDjActive ? 'Auto-DJ Active' : 'Engine Ready'}
             </span>
-          </div>
+          </motion.div>
           <div className="flex gap-4 text-white/40">
-            <Monitor 
-              size={18} 
-              className={`cursor-pointer transition-colors ${vizMode !== 'ambient' ? 'text-dj-accent' : 'hover:text-white'}`}
-              onClick={() => setVizMode(prev => prev === 'psychedelic' ? 'tunnel' : prev === 'tunnel' ? 'equalizer' : 'psychedelic')}
-            />
-            <Layout size={18} className="hover:text-white cursor-pointer transition-colors" />
-            <Settings size={18} className="hover:text-white cursor-pointer transition-colors" />
-            <Maximize2 size={18} className="hover:text-white cursor-pointer transition-colors" />
+            <motion.div whileHover={{ scale: 1.2, color: '#fff' }} whileTap={{ scale: 0.9 }}>
+              <Monitor 
+                size={18} 
+                className={`cursor-pointer transition-colors ${vizMode !== 'ambient' ? 'text-dj-accent' : ''}`}
+                onClick={() => setVizMode(prev => prev === 'psychedelic' ? 'tunnel' : prev === 'tunnel' ? 'equalizer' : 'psychedelic')}
+              />
+            </motion.div>
+            <motion.div whileHover={{ scale: 1.2, color: '#fff' }} whileTap={{ scale: 0.9 }}>
+              <Layout 
+                size={18} 
+                className={`cursor-pointer transition-all ${layoutMode !== 'standard' ? 'text-dj-accent' : ''}`} 
+                onClick={() => setLayoutMode(prev => prev === 'standard' ? 'expanded' : prev === 'expanded' ? 'minimal' : 'standard')}
+              />
+            </motion.div>
+            <motion.div whileHover={{ scale: 1.2, color: '#fff' }} whileTap={{ scale: 0.9 }}>
+              <Settings 
+                size={18} 
+                className={`cursor-pointer transition-all ${isSettingsOpen ? 'text-dj-accent rotate-90' : ''}`} 
+                onClick={() => setIsSettingsOpen(true)}
+              />
+            </motion.div>
           </div>
         </div>
-      </header>
+      </motion.header>
+
+      <SettingsModal 
+        isOpen={isSettingsOpen} 
+        onClose={() => setIsSettingsOpen(false)}
+        settings={settings}
+        onUpdateSetting={(key, val) => setSettings(prev => ({ ...prev, [key]: val }))}
+      />
 
       {/* Main Work Area */}
-      <main className="flex-1 flex overflow-hidden">
+      <main className={`flex-1 flex overflow-hidden transition-all duration-500 ${layoutMode === 'minimal' ? 'scale-95 opacity-50 grayscale' : ''}`}>
         {/* Deck A */}
-        <div className="flex-1 p-6 flex flex-col">
+        <motion.div 
+          layout
+          className={`flex-1 p-6 flex flex-col transition-all duration-500 ${layoutMode === 'expanded' ? 'flex-[1.5]' : ''}`}
+        >
           <Deck 
             id="A"
             track={deckA}
@@ -239,10 +330,13 @@ export default function App() {
             isSandbox={isSandboxMode}
             onToggleSandbox={() => setIsSandboxMode(!isSandboxMode)}
           />
-        </div>
+        </motion.div>
 
         {/* Mixer */}
-        <div className="flex flex-col gap-4 py-6">
+        <motion.div 
+          layout
+          className={`flex flex-col gap-4 py-6 transition-all duration-500 ${layoutMode === 'minimal' ? 'w-40' : ''}`}
+        >
           <Mixer 
             crossfader={crossfader}
             onCrossfaderChange={setCrossfader}
@@ -270,6 +364,8 @@ export default function App() {
             onLightingChange={setLightingIntensity}
             samplerVolume={samplerVolume}
             onSamplerVolumeChange={setSamplerVolume}
+            isQuantizeEnabled={settings.quantize}
+            onQuantizeToggle={() => setSettings(prev => ({ ...prev, quantize: !prev.quantize }))}
           />
           
           <AutoDjControls 
@@ -279,10 +375,13 @@ export default function App() {
             onMoodChange={setAutoDjMood}
             nextTrackReason={autoDjReason}
           />
-        </div>
+        </motion.div>
 
         {/* Deck B */}
-        <div className="flex-1 p-6 flex flex-col">
+        <motion.div 
+          layout
+          className={`flex-1 p-6 flex flex-col transition-all duration-500 ${layoutMode === 'expanded' ? 'flex-[1.5]' : ''}`}
+        >
           <Deck 
             id="B"
             track={deckB}
@@ -300,12 +399,12 @@ export default function App() {
             isSandbox={isSandboxMode}
             onToggleSandbox={() => setIsSandboxMode(!isSandboxMode)}
           />
-        </div>
+        </motion.div>
       </main>
 
       {/* AI Transition Panel (Overlay/Floating) */}
       <AnimatePresence>
-        {deckA && deckB && !isAutoDjActive && (
+        {deckA && deckB && !isAutoDjActive && settings.showAiAdvice && (
           <motion.div 
             initial={{ y: 100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
@@ -345,7 +444,7 @@ export default function App() {
         </div>
         <div className="flex gap-4">
           <span className={isAutoDjActive ? 'text-purple-500' : ''}>AUTO-DJ: {isAutoDjActive ? 'ON' : 'OFF'}</span>
-          <span>QUANTIZE: ON</span>
+          <span className={settings.quantize ? 'text-dj-accent' : ''}>QUANTIZE: {settings.quantize ? 'ON' : 'OFF'}</span>
         </div>
       </footer>
     </div>

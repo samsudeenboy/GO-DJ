@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Music, Plus, Search, Globe, Library as LibraryIcon, Cloud, Youtube, Sparkles } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { Music, Plus, Search, Globe, Library as LibraryIcon, Cloud, Youtube, Sparkles, FolderOpen, Download, Trash2 } from 'lucide-react';
 import { Track, SAMPLE_TRACKS } from '../constants';
 import { MusicGenerator } from './MusicGenerator';
 
@@ -8,10 +8,18 @@ interface LibraryProps {
 }
 
 export const Library: React.FC<LibraryProps> = ({ onLoadTrack }) => {
-  const [activeTab, setActiveTab] = useState<'local' | 'streaming' | 'generator'>('local');
+  const [activeTab, setActiveTab] = useState<'local' | 'streaming' | 'generator' | 'samples'>('local');
   const [searchQuery, setSearchQuery] = useState('');
   const [isCollapsed, setIsCollapsed] = useState(true);
   const [activeCategory, setActiveCategory] = useState<'all' | 'audio' | 'video' | 'karaoke'>('all');
+  const [samplePacks, setSamplePacks] = useState([
+    { id: 'sp1', name: 'Techno Foundations', count: 24, size: '120MB', color: 'bg-blue-500' },
+    { id: 'sp2', name: 'Lo-Fi Chill Beats', count: 18, size: '85MB', color: 'bg-orange-500' },
+    { id: 'sp3', name: 'Future Bass Essentials', count: 32, size: '210MB', color: 'bg-purple-500' }
+  ]);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const packInputRef = useRef<HTMLInputElement>(null);
 
   const filteredTracks = SAMPLE_TRACKS.filter(t => 
     t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -50,6 +58,13 @@ export const Library: React.FC<LibraryProps> = ({ onLoadTrack }) => {
               >
                 <Cloud size={14} />
                 Streaming
+              </button>
+              <button 
+                onClick={() => setActiveTab('samples')}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${activeTab === 'samples' ? 'bg-orange-500 text-white' : 'text-white/40 hover:text-white'}`}
+              >
+                <FolderOpen size={14} />
+                Sample Packs
               </button>
               <button 
                 onClick={() => setActiveTab('generator')}
@@ -123,9 +138,23 @@ export const Library: React.FC<LibraryProps> = ({ onLoadTrack }) => {
                 </div>
               </div>
             ))}
-            <div className="flex-shrink-0 w-40 border-2 border-dashed border-white/5 rounded-xl flex flex-col items-center justify-center gap-2 hover:border-white/20 transition-all cursor-pointer text-white/20 hover:text-white/40">
-              <Plus size={24} />
+            <div 
+              onClick={() => fileInputRef.current?.click()}
+              className="flex-shrink-0 w-40 border-2 border-dashed border-white/5 rounded-xl flex flex-col items-center justify-center gap-2 hover:border-dj-accent hover:bg-dj-accent/5 transition-all cursor-pointer text-white/20 hover:text-dj-accent group"
+            >
+              <Plus size={24} className="group-hover:scale-110 transition-transform" />
               <span className="text-[10px] font-bold uppercase">Import Track</span>
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                className="hidden" 
+                accept="audio/*" 
+                onChange={(e) => {
+                  if (e.target.files?.[0]) {
+                    alert(`Importing ${e.target.files[0].name}... (Simulation)`);
+                  }
+                }}
+              />
             </div>
             </div>
           </div>
@@ -154,6 +183,56 @@ export const Library: React.FC<LibraryProps> = ({ onLoadTrack }) => {
             <div className="text-center">
               <p className="text-xs font-bold uppercase tracking-widest text-white/60">Streaming Integration Active</p>
               <p className="text-[10px] text-white/30">Select a provider to browse your playlists</p>
+            </div>
+          </div>
+        ) : activeTab === 'samples' ? (
+          <div className="flex-1 flex gap-4 overflow-x-auto scrollbar-hide animate-in fade-in slide-in-from-bottom-2 duration-500">
+            {samplePacks.map(pack => (
+              <div key={pack.id} className="flex-shrink-0 w-64 bg-black/40 border border-white/5 rounded-2xl p-4 flex flex-col gap-4 group hover:border-white/20 transition-all">
+                <div className="flex justify-between items-start">
+                  <div className={`w-12 h-12 rounded-xl ${pack.color} flex items-center justify-center text-white shadow-lg group-hover:scale-110 transition-transform`}>
+                    <FolderOpen size={24} />
+                  </div>
+                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button className="p-1.5 rounded-lg bg-white/5 hover:bg-red-500/20 hover:text-red-400 transition-all">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-white mb-1">{pack.name}</h4>
+                  <div className="flex gap-3 text-[9px] font-bold text-white/40 uppercase tracking-widest">
+                    <span>{pack.count} Samples</span>
+                    <span>{pack.size}</span>
+                  </div>
+                </div>
+                <button className="w-full py-2 rounded-xl bg-white/5 hover:bg-white/10 text-[10px] font-black uppercase tracking-widest transition-all border border-white/5">
+                  Load Pack
+                </button>
+              </div>
+            ))}
+            <div 
+              onClick={() => packInputRef.current?.click()}
+              className="flex-shrink-0 w-64 border-2 border-dashed border-white/5 rounded-2xl flex flex-col items-center justify-center gap-3 hover:border-orange-500 hover:bg-orange-500/5 transition-all cursor-pointer text-white/20 hover:text-orange-500 group"
+            >
+              <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center group-hover:bg-orange-500/20 transition-all">
+                <Download size={24} />
+              </div>
+              <div className="text-center">
+                <p className="text-[10px] font-black uppercase tracking-widest">Import Sample Pack</p>
+                <p className="text-[8px] opacity-60">ZIP, WAV, AIFF SUPPORTED</p>
+              </div>
+              <input 
+                type="file" 
+                ref={packInputRef} 
+                className="hidden" 
+                accept=".zip,.wav,.aiff" 
+                onChange={(e) => {
+                  if (e.target.files?.[0]) {
+                    alert(`Importing Sample Pack: ${e.target.files[0].name}... (Simulation)`);
+                  }
+                }}
+              />
             </div>
           </div>
         ) : (

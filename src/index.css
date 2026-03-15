@@ -1,11 +1,15 @@
 @import "tailwindcss";
 
 @theme {
-  --color-dj-bg: #0a0a0c;
-  --color-dj-card: #151619;
+  --color-dj-bg: #050506;
+  --color-dj-card: #121316;
+  --color-dj-card-dark: #0a0a0c;
   --color-dj-accent: #00ff9d;
   --color-dj-accent-secondary: #ff0055;
-  --color-dj-border: #2a2b2f;
+  --color-dj-accent-blue: #00d4ff;
+  --color-dj-accent-orange: #ff8c00;
+  --color-dj-border: #222327;
+  --color-dj-border-bright: #3a3b40;
   
   --font-mono: "JetBrains Mono", monospace;
 }
@@ -13,35 +17,62 @@
 @layer base {
   body {
     @apply bg-dj-bg text-white font-sans antialiased overflow-hidden;
+    background-image: 
+      radial-gradient(circle at 50% 0%, rgba(0, 255, 157, 0.05) 0%, transparent 50%),
+      radial-gradient(circle at 0% 100%, rgba(255, 0, 85, 0.03) 0%, transparent 40%);
   }
 }
 
 .knob-container {
-  @apply relative w-12 h-12 rounded-full border-2 border-dj-border flex items-center justify-center cursor-pointer;
-  background: radial-gradient(circle at center, #2a2b2f 0%, #151619 100%);
+  @apply relative w-12 h-12 rounded-full border-2 border-dj-border flex items-center justify-center cursor-pointer transition-all duration-200;
+  background: conic-gradient(from 180deg at 50% 50%, #1a1b1e 0deg, #2a2b2f 180deg, #1a1b1e 360deg);
+  box-shadow: 
+    inset 0 2px 4px rgba(255,255,255,0.05),
+    0 4px 8px rgba(0,0,0,0.4);
+}
+
+.knob-container:hover {
+  @apply border-dj-border-bright;
+  box-shadow: 
+    inset 0 2px 4px rgba(255,255,255,0.1),
+    0 6px 12px rgba(0,0,0,0.5);
 }
 
 .knob-indicator {
-  @apply absolute top-1 w-1 h-3 bg-dj-accent rounded-full origin-bottom;
+  @apply absolute top-1 w-1 h-3 bg-dj-accent rounded-full origin-bottom shadow-[0_0_8px_rgba(0,255,157,0.5)];
 }
 
 .fader-track {
-  @apply w-2 h-32 bg-dj-border rounded-full relative;
+  @apply w-2.5 h-32 bg-black/60 rounded-full relative border border-white/5;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
 }
 
 .fader-handle {
-  @apply w-6 h-4 bg-white rounded-sm absolute left-1/2 -translate-x-1/2 cursor-pointer shadow-lg;
+  @apply w-7 h-5 bg-zinc-200 rounded-sm absolute left-1/2 -translate-x-1/2 cursor-pointer shadow-xl transition-transform active:scale-95;
+  background: linear-gradient(to bottom, #f4f4f5 0%, #a1a1aa 100%);
+  border: 1px solid rgba(0,0,0,0.2);
+}
+
+.fader-handle::after {
+  content: '';
+  @apply absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-0.5 bg-dj-accent/40;
 }
 
 .crossfader-track {
-  @apply w-48 h-2 bg-dj-border rounded-full relative;
-}
-
-.crossfader-handle {
-  @apply w-4 h-8 bg-white rounded-sm absolute top-1/2 -translate-y-1/2 cursor-pointer shadow-lg;
+  @apply w-full h-3 bg-black/60 rounded-full relative border border-white/5;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
 }
 
 .waveform-container {
-  @apply w-full h-24 bg-black/40 rounded-lg overflow-hidden relative border border-dj-border;
+  @apply w-full h-24 bg-black/60 rounded-xl overflow-hidden relative border border-white/5;
+  background-image: linear-gradient(to bottom, transparent 0%, rgba(0, 255, 157, 0.02) 100%);
+}
+
+.glass-panel {
+  @apply bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl;
+}
+
+.neon-glow {
+  box-shadow: 0 0 15px var(--glow-color, rgba(0, 255, 157, 0.3));
 }
 
